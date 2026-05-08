@@ -42,6 +42,7 @@ def main():
         print(f"Потребление памяти для загрузки изображений: {get_memory_usage()-mem_start:.2f} MB")
 
     t = time.time()
+    tracemalloc.start()
     ref_idx = len(images_orig) // 2
     images_aligned_raw = align_images(images_orig, reference_idx=ref_idx)
     if args.console_timer_output:
@@ -50,9 +51,12 @@ def main():
 
     images_aligned = crop_artifacts(images_aligned_raw, p=0.05)
     t = time.time()
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
     if args.console_timer_output:
         print(f"Обрезка изображений завершена. Время: {time.time()-t:.2f}s")
         print(f"Потребление памяти после выравнивание и обрезки изображений: {get_memory_usage()-mem_start:.2f} MB")
+        print(f"Пиковое потребление памяти на выравнивании: {peak / 1024 / 1024:.2f} MB")
 
     methods = [args.method] if args.method else ['basic', 'pyramidal']
 
@@ -68,13 +72,13 @@ def main():
         
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
-        print(f" Метод {method}: Пик памяти: {peak / 1024 / 1024:.2f} MB")
         if result is not None:
             out_name = f"result_{method}.png"
             cv.imwrite(os.path.join(args.output_dir, out_name), result)
             
             if args.console_timer_output:
-                print(f"Метод {method} закончил обработку за {time.time()-t_m:.2f}s")
+                print(f"Метод {method}: Закончил обработку за {time.time()-t_m:.2f}s")
+                print(f"Метод {method}: Пик памяти: {peak / 1024 / 1024:.2f} MB")
 
             if args.use_metrics:
                 sample_cropped = crop_artifacts([img_set.sample_image], p=0.05)[0]
