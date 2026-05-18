@@ -4,12 +4,14 @@ import argparse
 import cv2 as cv
 import psutil
 import tracemalloc
+import torch
 
 from src.ImageSet import ImagesSet
 from src.Utils import align_images, crop_artifacts
 from src.BasicStacking import combine_images_basic
 from src.PyramidalStacking import combine_images_pyramidal
 from src.Metrics import compute_difference_metric
+from src.UNet_stacking import combine_images_ml
 
 def get_memory_usage():
     process = psutil.Process(os.getpid())
@@ -55,30 +57,44 @@ def main():
     tracemalloc.stop()
     if args.console_timer_output:
         print(f"Обрезка изображений завершена. Время: {time.time()-t:.2f}s")
-        print(f"Потребление памяти после выравнивание и обрезки изображений: {get_memory_usage()-mem_start:.2f} MB")
         print(f"Пиковое потребление памяти на выравнивании: {peak / 1024 / 1024:.2f} MB")
 
     methods = [args.method] if args.method else ['basic', 'pyramidal']
 
+    methods = [args.method] if args.method else ['basic', 'pyramidal', 'ML']
+
     for method in methods:
         t_m = time.time()
         tracemalloc.start()
+        
+        # Сброс пика памяти GPU перед замером метода
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+            
         result = None
         
         if method == 'basic':
             result = combine_images_basic(images_aligned, images_aligned)
         elif method == 'pyramidal':
             result = combine_images_pyramidal(images_aligned, levels=5)
+        elif method == 'ML':
+            model_weights = "models/model_weights.pth"
+            result = combine_images_ml(images_aligned, model_path=model_weights)
         
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
+        
         if result is not None:
             out_name = f"result_{method}.png"
             cv.imwrite(os.path.join(args.output_dir, out_name), result)
             
             if args.console_timer_output:
                 print(f"Метод {method}: Закончил обработку за {time.time()-t_m:.2f}s")
-                print(f"Метод {method}: Пик памяти: {peak / 1024 / 1024:.2f} MB")
+                print(f"Метод {method}: Пик ОЗУ (CPU): {peak / 1024 / 1024:.2f} MB")
+                
+                if method == 'ML' and torch.cuda.is_available():
+                    gpu_peak = torch.cuda.max_memory_allocated() / 1024 / 1024
+                    print(f"Метод {method}: Пик видеопамяти (GPU VRAM): {gpu_peak:.2f} MB")
 
             if args.use_metrics:
                 sample_cropped = crop_artifacts([img_set.sample_image], p=0.05)[0]
