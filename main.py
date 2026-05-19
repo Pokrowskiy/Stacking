@@ -10,7 +10,7 @@ from src.ImageSet import ImagesSet
 from src.Utils import align_images, crop_artifacts
 from src.BasicStacking import combine_images_basic
 from src.PyramidalStacking import combine_images_pyramidal
-from src.Metrics import compute_difference_metric
+from src.Metrics import compute_difference_metric, compute_difference_image
 from src.UNet_stacking import combine_images_ml
 
 def get_memory_usage():
@@ -99,6 +99,7 @@ def main():
             if args.use_metrics:
                 sample_cropped = crop_artifacts([img_set.sample_image], p=0.05)[0]
                 cv.imwrite(os.path.join(args.output_dir, "cropped_sample.png"), sample_cropped)
+                cv.imwrite(os.path.join(args.output_dir, f"diff_image_{method}.png"), compute_difference_image(result, sample_cropped))
                 m = compute_difference_metric(result, sample_cropped)
                 print(f"Метрики {method}: PSNR: {m['PSNR']:.2f}, SSIM: {m['SSIM']:.4f}, LPIPS: {m['LPIPS']:.4f}")
 
